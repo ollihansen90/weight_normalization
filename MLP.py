@@ -16,30 +16,30 @@ class MLP(nn.Module):
 
         for layer in self.net:
             x = layer(x)
-
         return x
 
     def normalize(self):
         pass
 
+    
+
 class scalable_linear(nn.Module):
     def __init__(self, dim_in, dim_out, bias=True):
         super(scalable_linear, self).__init__()
         self.linear = nn.Linear(dim_in, dim_out, bias)
-        self.scaling = nn.Parameter(torch.ones(dim_out))#, requires_grad=True)
-        """self.weights = nn.Parameter(torch.randn(dim_out, dim_in), requires_grad=True)
-        self.bias = nn.Parameter(torch.randn(dim_out), requires_grad=True)"""
+        self.scaling = nn.Parameter(torch.ones(dim_out))
 
     def forward(self, x):
         normlist = torch.linalg.norm(self.linear.weight, dim=-1)
         return self.linear(x)* self.scaling/normlist
 
-    def normalize(self, old_norms=None):
+    def normalize(self, old_norms=None, p=2):
         #print(self.linear.weight)
         with torch.no_grad():
             if old_norms is not None: # TODO: Passt das mit den Dimensionen?
                 self.linear.weight.mul_(old_norms.transpose(-2,-1)) # = torch.nn.Parameter((self.weights.T*preweights).T, requires_grad=True)
-            normlist = torch.linalg.norm(self.linear.weight, keepdim=True, dim=-1)
+            #normlist = torch.linalg.norm(self.linear.weight, keepdim=True, dim=-1)
+            normlist = torch.sum(torch.abs(self.linear.weight.data)**p, dim=-1).unsqueeze(-1)**(1/p)
             self.linear.weight.data.mul_(1/normlist)
             #self.linear.bias = torch.nn.Parameter(self.bias*normlist, requires_grad=True)
             normlist*=self.scaling.unsqueeze(-1)
@@ -60,11 +60,11 @@ class MLP_normed(nn.Module):
             x = F.relu(layer(x)) * 1/normlist
         return self.outnorms*x
 
-    def normalize(self):
+    def normalize(self, p):
         old_norms = None
         returnnorms = torch.zeros((4, 2))
         for i, layer in enumerate(self.layers):
-            old_norms = layer.normalize(old_norms)
+            old_norms = layer.normalize(old_norms, p)
             returnnorms[i,0] = torch.max(old_norms)
             returnnorms[i,1] = torch.min(old_norms)
         with torch.no_grad():
@@ -85,7 +85,7 @@ class Trainer(nn.Module):
         #print(x.shape)
         return self.network(x)
 
-    def normalize(self):
-        returnnorms = self.network.normalize()
+    def normalize(self, p=2):
+        returnnorms = self.network.normalize(p=p)
         return returnnorms
 

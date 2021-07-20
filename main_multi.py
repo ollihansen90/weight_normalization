@@ -47,12 +47,11 @@ print(n_data_test)
 
 lr = 5e-5
 betas = (0.9, 0.999)
-normalize_every = 5
 #optimizer = torch.optim.SGD(model.parameters(), lr=lr)#, betas=betas)
 
-n_epochs = 50
+n_epochs = 30
 
-params = [5*10**(-i) for i in range(5,6)][::-1] # next evtl. n_epoch=200 
+params = [1,2,10][::-1] # next evtl. n_epoch=200 
 #modelnames = ["model_1619164701", "model_1619172429", "model_1619180155", "model_1619187884", "model_1619195610"]
 lossliste = torch.zeros(len(params), n_epochs).to(device)
 accliste_train = torch.zeros(len(params), n_epochs).to(device)
@@ -73,11 +72,11 @@ for param_idx, param in enumerate(params):
     counter = 0
     for epoch in range(start_epoch, n_epochs+start_epoch):
         if epoch==0: # warmup
-            optimizer = Lamb(model.parameters(), lr=1e-5, betas=betas)
+            optimizer = Lamb(model.parameters(), lr=5e-5, betas=betas)
             #optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
         if epoch==1:
             for g in optimizer.param_groups:
-                g["lr"]= lr
+                g["lr"]= 5e-5
         epochstart = dt.now().timestamp()
         total_loss = 0
         acc_train = 0
@@ -101,7 +100,7 @@ for param_idx, param in enumerate(params):
             loss.backward()
             optimizer.step()
             
-            returnednorms = model.normalize()
+            returnednorms = model.normalize(p=param)
 
             maxinorms[epoch,:] += returnednorms[:,0].T
             mininorms[epoch,:] += returnednorms[:,1].T
@@ -161,18 +160,20 @@ if plotstuff:
     paramlist = list(["train_"+str(param), "test_"+str(param)] for param in params)
     plt.legend([x for y in paramlist for x in y])
     plt.savefig("plots/plot_{}_A.png".format(round(starttime)))
+ 
+    maxinorms = maxinorms*batch_size/n_data_train
+    mininorms = mininorms*batch_size/n_data_train
 
     plt.figure()
-    plt.subplot(1,2,1)
     for i in range(4):
-        plt.plot(mininorms[i,:])
+        plt.plot(mininorms[:,i])
     plt.title("Mininorms")
     plt.legend(["Layer 0", "Layer 1", "Layer 2", "Layer 3"])
     plt.savefig("plots/plot_{}_mininorms".format(round(starttime)))
-    
+
     plt.figure()
     for i in range(4):
-        plt.plot(maxinorms[i,:])
+        plt.plot(maxinorms[:,i])
     plt.title("Maxinorms")
     plt.legend(["Layer 0", "Layer 1", "Layer 2", "Layer 3"])
     plt.savefig("plots/plot_{}_maxinorms".format(round(starttime)))
@@ -183,6 +184,8 @@ torch.save(accliste_train, "auswertungen/accliste_train_{}.pt".format(round(star
 torch.save(lossliste, "auswertungen/lossliste_{}.pt".format(round(starttime)))
 torch.save({"accliste_test": accliste_test, 
             "accliste_train": accliste_train, 
-            "lossliste": lossliste}, 
+            "lossliste": lossliste, 
+            "mininorms": mininorms,
+            "maxinorms": maxinorms}, 
             "auswertungen/auswertung.pt"
             )
