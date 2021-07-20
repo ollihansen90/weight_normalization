@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from MLP import MLP, MLP_normed, Trainer
+from MLP import MLP, MLP_normed, Trainer, NetworkGenerator
 #from dataloader import Dataloader
 #from dataset import MNIST_data
 
@@ -49,24 +49,26 @@ lr = 5e-5
 betas = (0.9, 0.999)
 #optimizer = torch.optim.SGD(model.parameters(), lr=lr)#, betas=betas)
 
-n_epochs = 30
+n_epochs = 200
 
-params = [1,2,10][::-1] # next evtl. n_epoch=200 
-#modelnames = ["model_1619164701", "model_1619172429", "model_1619180155", "model_1619187884", "model_1619195610"]
-lossliste = torch.zeros(len(params), n_epochs).to(device)
-accliste_train = torch.zeros(len(params), n_epochs).to(device)
-accliste_test = torch.zeros(len(params), n_epochs).to(device)
+#params = [1,2,10][::-1] # next evtl. n_epoch=200 
+params = NetworkGenerator()
+
+n_params = 3 #len(params)
+lossliste = torch.zeros(n_params, n_epochs).to(device)
+accliste_train = torch.zeros(n_params, n_epochs).to(device)
+accliste_test = torch.zeros(n_params, n_epochs).to(device)
 loss_func = torch.nn.CrossEntropyLoss()
 for param_idx, param in enumerate(params):
     starttime = dt.now().timestamp()
-    model = Trainer().to(device)
+    model = Trainer(param).to(device)
     #model = VisualTransformer(inner_dim=p, transformer_depth=1, dim_head=49, attn_heads=3, mlp_dim=49, num_classes=num_classes).to(device)
     #model = torch.load("models/"+modelnames[param_idx]+".pt")
     print(sum([params.numel() for params in model.parameters()]))
-    print("lr", param)
+    print("Network", param_idx)
     
     with open("where.txt", "a+") as file:
-        file.write("--- lr "+str(param)+", "+ str(round(starttime)) + 70*"-"+"\n")
+        file.write("--- Network "+str(param_idx)+", "+ str(round(starttime)) + 70*"-"+"\n")
     maxinorms = torch.zeros(n_epochs,4)
     mininorms = torch.zeros(n_epochs,4)
     counter = 0
@@ -100,10 +102,10 @@ for param_idx, param in enumerate(params):
             loss.backward()
             optimizer.step()
             
-            returnednorms = model.normalize(p=param)
-
+            returnednorms = model.normalize()
+            """
             maxinorms[epoch,:] += returnednorms[:,0].T
-            mininorms[epoch,:] += returnednorms[:,1].T
+            mininorms[epoch,:] += returnednorms[:,1].T"""
 
             total_loss += loss.detach()
         
@@ -148,20 +150,20 @@ for param_idx, param in enumerate(params):
 
 if plotstuff:
     plt.figure()
-    for i in range(len(params)):
+    for i in range(n_params):
         plt.plot(lossliste[i,:].cpu())
-    plt.legend(params)
+    #plt.legend(params)
     plt.savefig("plots/plot_{}.png".format(round(starttime)))
 
     plt.figure()
-    for i in range(len(params)):
+    for i in range(n_params):
         plt.plot(accliste_train[i,:].cpu())
         plt.plot(accliste_test[i,:].cpu())
-    paramlist = list(["train_"+str(param), "test_"+str(param)] for param in params)
+    paramlist = list(["train_"+str(param), "test_"+str(param)] for param in range(n_params))
     plt.legend([x for y in paramlist for x in y])
     plt.savefig("plots/plot_{}_A.png".format(round(starttime)))
  
-    maxinorms = maxinorms*batch_size/n_data_train
+    """maxinorms = maxinorms*batch_size/n_data_train
     mininorms = mininorms*batch_size/n_data_train
 
     plt.figure()
@@ -176,7 +178,7 @@ if plotstuff:
         plt.plot(maxinorms[:,i])
     plt.title("Maxinorms")
     plt.legend(["Layer 0", "Layer 1", "Layer 2", "Layer 3"])
-    plt.savefig("plots/plot_{}_maxinorms".format(round(starttime)))
+    plt.savefig("plots/plot_{}_maxinorms".format(round(starttime)))"""
     
 
 torch.save(accliste_test, "auswertungen/accliste_test_{}.pt".format(round(starttime)))
