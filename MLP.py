@@ -3,16 +3,16 @@ from torch import nn
 import torch.nn.functional as F
 
 class MLP(nn.Module):
-    def __init__(self, dims=[784, 256, 64, 64, 62], bn=False):
+    def __init__(self, dims=[784, 256, 64, 64, 62], bn=False, bias=True):
         super(MLP, self).__init__()
         self.net = nn.ModuleList([])
         for i in range(0, len(dims)-2):
-            self.net.append(nn.Linear(dims[i], dims[i+1]))
+            self.net.append(nn.Linear(dims[i], dims[i+1], bias=bias))
             if bn:
                 self.net.append(nn.BatchNorm1d(dims[i+1]))
             self.net.append(nn.ReLU())
         
-        self.net.append(nn.Linear(dims[-2], dims[-1]))
+        self.net.append(nn.Linear(dims[-2], dims[-1], bias=bias))
 
     def forward(self, x):
         #x = x.flatten(start_dim=-3, end_dim=-1)
@@ -52,9 +52,9 @@ class scalable_linear(nn.Module):
 
 
 class MLP_normed(nn.Module):
-    def __init__(self, dims=[784, 256, 64, 64, 62]):
+    def __init__(self, dims=[784, 256, 64, 64, 62], bias=True):
         super().__init__()
-        self.layers = nn.ModuleList([scalable_linear(dims[i], dims[i+1]) for i in range(len(dims)-1)])
+        self.layers = nn.ModuleList([scalable_linear(dims[i], dims[i+1], bias=bias) for i in range(len(dims)-1)])
         self.outnorms = nn.Parameter(torch.ones(dims[-1]), requires_grad=True)
 
     def forward(self, x):
@@ -94,6 +94,6 @@ class Trainer(nn.Module):
 
 
 def NetworkGenerator():
-    yield MLP_normed()
-    yield MLP()
-    yield MLP(bn=True)
+    yield MLP_normed(bias=False)
+    yield MLP(bias=False)
+    yield MLP(bn=True, bias=False)
