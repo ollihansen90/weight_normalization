@@ -94,6 +94,6 @@ class Trainer(nn.Module):
 
 
 def NetworkGenerator():
-    yield MLP_normed(bias=False)
-    yield MLP(bias=False)
-    yield MLP(bn=True, bias=False)
+    yield MLP_normed(bias=True)
+    yield MLP(bias=True)
+    yield MLP(bn=True, bias=True)

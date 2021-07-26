@@ -10,6 +10,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from lamb import Lamb
 
 import matplotlib.pyplot as plt
+from datetime import timedelta
 from datetime import datetime as dt
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -45,13 +46,13 @@ dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_siz
 print(n_data_train)
 print(n_data_test)
 
-lr = 5e-5
+lr = 1e-3 # LAMB: 5e-5
 betas = (0.9, 0.999)
 #optimizer = torch.optim.SGD(model.parameters(), lr=lr)#, betas=betas)
 
-n_epochs = 200
+n_epochs = 20
 
-#params = [1,2,10][::-1] # next evtl. n_epoch=200 
+#params = [5e-3, 2e-3, 1e-3, 5e-4]#[::-1] # next evtl. n_epoch=200 
 params = NetworkGenerator()
 
 n_params = 3 #len(params)
@@ -60,25 +61,26 @@ accliste_train = torch.zeros(n_params, n_epochs).to(device)
 accliste_test = torch.zeros(n_params, n_epochs).to(device)
 loss_func = torch.nn.CrossEntropyLoss()
 for param_idx, param in enumerate(params):
+    #lr = param
     starttime = dt.now().timestamp()
     model = Trainer(param).to(device)
-    #model = VisualTransformer(inner_dim=p, transformer_depth=1, dim_head=49, attn_heads=3, mlp_dim=49, num_classes=num_classes).to(device)
     #model = torch.load("models/"+modelnames[param_idx]+".pt")
     print(sum([params.numel() for params in model.parameters()]))
-    print("Network", param_idx)
+    print("Net", param_idx)
     
     with open("where.txt", "a+") as file:
-        file.write("--- Network "+str(param_idx)+", "+ str(round(starttime)) + 70*"-"+"\n")
+        file.write("--- Net "+str(param_idx)+", "+ str(round(starttime)) + 70*"-"+"\n")
     maxinorms = torch.zeros(n_epochs,4)
     mininorms = torch.zeros(n_epochs,4)
     counter = 0
     for epoch in range(start_epoch, n_epochs+start_epoch):
         if epoch==0: # warmup
-            optimizer = Lamb(model.parameters(), lr=5e-5, betas=betas)
-            #optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
+            #optimizer = Lamb(model.parameters(), lr=lr, betas=betas)
+            optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+            #optimizer = torch.optim.SGD(model.parameters(), lr=lr)
         if epoch==1:
             for g in optimizer.param_groups:
-                g["lr"]= 5e-5
+                g["lr"]= lr
         epochstart = dt.now().timestamp()
         total_loss = 0
         acc_train = 0
@@ -125,7 +127,7 @@ for param_idx, param in enumerate(params):
         accliste_test[param_idx, epoch-start_epoch] = acc_test
         lossliste[param_idx, epoch-start_epoch] = total_loss.item()
         plottime = dt.now().timestamp()
-        line = "{}. {}\t| acc: {}, {}\t|  loss: {}\t| time: {} \t| time total: {}\t{}".format(
+        line = "{}. {}\t| acc: {}, {}\t|  loss: {}\t| time: {} \t| time total: {}\t{}\t{}".format(
                 str(param_idx+1).rjust(3),
                         str(epoch).rjust(3), 
                                 str(round(acc_train, 4)).rjust(6),
@@ -133,7 +135,8 @@ for param_idx, param in enumerate(params):
                                                     str(round(total_loss.item(),3)).rjust(7), 
                                                                 str(round(plottime-epochstart, 2)).rjust(5), 
                                                                                     str(round(plottime-starttime,2)).rjust(8), 
-                                                                                        str(dt.fromtimestamp(plottime-starttime).strftime("%H:%M:%S")).rjust(8)
+                                                                                        str(dt.fromtimestamp(plottime-starttime).strftime("%H:%M:%S")).rjust(8),
+                                                                                        str(dt.now()+timedelta(hours=2))
                                                                                             )
 
         print(line)
@@ -159,7 +162,7 @@ if plotstuff:
     for i in range(n_params):
         plt.plot(accliste_train[i,:].cpu())
         plt.plot(accliste_test[i,:].cpu())
-    paramlist = list(["train_"+str(param), "test_"+str(param)] for param in range(n_params))
+    paramlist = list(["train_"+str(param), "test_"+str(param)] for param in range(n_params)) #params)
     plt.legend([x for y in paramlist for x in y])
     plt.savefig("plots/plot_{}_A.png".format(round(starttime)))
  
