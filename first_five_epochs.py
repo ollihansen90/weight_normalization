@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
-from MLP import Trainer, NetworkGenerator, Normalizer
-from math import sqrt
+from MLP import MLP, MLP_normed, Trainer, NetworkGenerator, Normalizer
 #from dataloader import Dataloader
 #from dataset import MNIST_data
 
@@ -47,29 +46,21 @@ dataloader_test = torch.utils.data.DataLoader(dataset_test, batch_size=batch_siz
 print(n_data_train)
 print(n_data_test)
 
-normalizer = Normalizer(device=device)#.to(device) # Lädt Daten
+normalizer = Normalizer(device=device, load=True)#.to(device)
 """for img, label in dataloader_train:
     normalizer.estimate(img.flatten(-2,-1).to(device))
-normalizer.estimate_done()"""
-#normalizer.plot_estimates()
+normalizer.estimate_done()
+normalizer.save_imgs()"""
 
-#lr = 1e-7 # LAMB: 5e-5
-lr_start = 1e-7
-lr_end = 1e-4
-n_warmup = 3
-#lr = [1e-4, 5e-5, 1e-5, 5e-6, 1e-6]
+lr = 1e-4 # LAMB: 5e-5
 betas = (0.9, 0.999)
 #optimizer = torch.optim.SGD(model.parameters(), lr=lr)#, betas=betas)
 
-n_epochs = 20
+n_epochs = 5
 
-#params = [40, 45, 50, 55, 60]#[::-1] # next evtl. n_epoch=200 
-#n_params = len(params)
-n_params = 30 #len(params)
-params = NetworkGenerator(n=n_params//3)
-
-schritte = n_params*n_epochs
-print("Erwartete Dauer (Stunden, Minuten, Sekunden):", schritte*21/60/60, ",", schritte*21/60, ",", schritte*21)
+#params = [5e-3, 2e-3, 1e-3, 5e-4]#[::-1] # next evtl. n_epoch=200 
+n_params = 1 #len(params)
+params = NetworkGenerator(n=n_params) #int(n_params/2))
 
 lossliste = torch.zeros(n_params, n_epochs).to(device)
 accliste_train = torch.zeros(n_params, n_epochs).to(device)
@@ -79,8 +70,6 @@ for param_idx, param in enumerate(params):
     #lr = param
     starttime = dt.now().timestamp()
     model = Trainer(param, normalizer).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr_start)
-    #model = Trainer(MLP_normed(start_norm=1/sqrt(3), outnorm_init=param)).to(device)
     #model = torch.load("models/"+modelnames[param_idx]+".pt")
     print(sum([params.numel() for params in model.parameters()]))
     print("Net", param_idx)
@@ -91,6 +80,13 @@ for param_idx, param in enumerate(params):
     mininorms = torch.zeros(n_epochs,4)
     counter = 0
     for epoch in range(start_epoch, n_epochs+start_epoch):
+        if epoch==0: # warmup
+            #optimizer = Lamb(model.parameters(), lr=lr, betas=betas)
+            optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+            #optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+        if epoch==1:
+            for g in optimizer.param_groups:
+                g["lr"]= lr
         epochstart = dt.now().timestamp()
         total_loss = 0
         acc_train = 0
@@ -99,9 +95,7 @@ for param_idx, param in enumerate(params):
         # Training
         model.train()
         returnednorms = None
-        for idx, (img, labels) in enumerate(dataloader_train):
-            for g in optimizer.param_groups:
-                g["lr"] = lr_start*(lr_end/lr_start)**min((epoch+idx/len(dataloader_train))/n_warmup, 1)
+        for img, labels in dataloader_train:
             #img, labels = batch
             img, labels = img.to(device), labels.to(device)
             #print(labels[0])
@@ -115,14 +109,23 @@ for param_idx, param in enumerate(params):
 
             optimizer.zero_grad()
             loss.backward()
-            optimizer.step()
+            #optimizer.step()
+            if epoch==1:
+                for name, param in model.named_parameters():
+                    #if "1" in name or "4" in name or "7" in name:
+                    print(name, "\t", torch.mean(param).item(), "\t", torch.std(param).item())
+                model.normalize()
+                print("\n")
+                for name, param in model.named_parameters():
+                    #if "1" in name or "4" in name or "7" in name:
+                    print(name, "\t", torch.mean(param).item(), "\t", torch.std(param).item())
+                exit()
             
             """
             maxinorms[epoch,:] += returnednorms[:,0].T
             mininorms[epoch,:] += returnednorms[:,1].T"""
 
             total_loss += loss.detach()
-            model.normalize()
         
         # Testing
         model.eval()
@@ -165,12 +168,10 @@ for param_idx, param in enumerate(params):
         print("Model saved, {}".format(round(starttime)))
 
 if plotstuff:
-    MLP_BN_data = torch.load("MLP_BN/MLP_BN_100_mean.pt")
     plt.figure()
     for i in range(n_params):
         plt.plot(lossliste[i,:].cpu())
     #plt.legend(params)
-    plt.plot(MLP_BN_data["lossliste"][:n_epochs].cpu(), "k")   
     plt.grid()
     plt.savefig("plots/plot_{}.png".format(round(starttime)))
 
@@ -178,13 +179,10 @@ if plotstuff:
     for i in range(n_params):
         plt.plot(accliste_train[i,:].cpu())
         plt.plot(accliste_test[i,:].cpu())
-    plt.plot(MLP_BN_data["accliste_train"][:n_epochs].cpu(), "k")
-    plt.plot(MLP_BN_data["accliste_test"][:n_epochs].cpu(), "k")    
     paramlist = list(["train_"+str(param), "test_"+str(param)] for param in range(n_params)) #params)
     plt.legend([x for y in paramlist for x in y])
     plt.grid()
     plt.savefig("plots/plot_{}_A.png".format(round(starttime)))
-
  
     """maxinorms = maxinorms*batch_size/n_data_train
     mininorms = mininorms*batch_size/n_data_train
@@ -204,8 +202,6 @@ if plotstuff:
     plt.savefig("plots/plot_{}_maxinorms".format(round(starttime)))"""
     
 
-print("Plots saved.")
-
 torch.save(accliste_test, "auswertungen/accliste_test_{}.pt".format(round(starttime)))
 torch.save(accliste_train, "auswertungen/accliste_train_{}.pt".format(round(starttime)))
 torch.save(lossliste, "auswertungen/lossliste_{}.pt".format(round(starttime)))
@@ -217,4 +213,11 @@ torch.save({"accliste_test": accliste_test,
             "auswertungen/auswertung.pt"
             )
 
-print("Data saved.")
+out1 = model(img[0].unsqueeze(0))
+print(model.network.outnorms)
+model.normalize()
+out2 = model(img[0].unsqueeze(0))
+print(model.network.outnorms)
+print(out1.shape)
+print(torch.linalg.norm(out1-out2))
+print(out1@out2/(torch.linalg.norm(out1)*torch.linalg.norm(out2)))
