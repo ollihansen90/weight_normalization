@@ -86,7 +86,7 @@ for param_idx, param in enumerate(params):
     print("Net", param_idx)
     
     with open("where.txt", "a+") as file:
-        file.write("--- Net "+str(param)+", "+ str(round(starttime)) + 70*"-"+"\n")
+        file.write("--- Net "+str(list(param.children()))+", "+ str(round(starttime)) + 70*"-"+"\n")
     maxinorms = torch.zeros(n_epochs,4)
     mininorms = torch.zeros(n_epochs,4)
     counter = 0

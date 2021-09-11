@@ -11,16 +11,20 @@ colorlist = 10*["b"]+10*["r"]+10*["k"]
 accliste_train = data["accliste_train"].cpu()
 accliste_test = data["accliste_test"].cpu()
 
+n_epochs = 20
+MLP_BN_data = torch.load("MLP_BN/MLP_BN_100_mean.pt")
 
 plt.figure()
 for ii, col in enumerate(colorlist):
     plt.plot(accliste_train[ii,:], col, alpha=0.3)
+plt.plot(MLP_BN_data["accliste_train"][:n_epochs].cpu(), "m")
 plt.grid()
 plt.savefig("accliste_train.png")
 
 plt.figure()
 for ii, col in enumerate(colorlist):
     plt.plot(accliste_test[ii,:], col, alpha=0.3)
+plt.plot(MLP_BN_data["accliste_test"][:n_epochs].cpu(), "m")  
 plt.grid()
 plt.savefig("accliste_test.png")
 

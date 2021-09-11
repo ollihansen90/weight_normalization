@@ -88,9 +88,62 @@ class scalable_linear_noBubble(nn.Module):
         return None
 
 
-
-
 class MLP_normed(nn.Module):
+    def __init__(   self, 
+                    dims=[784, 256, 64, 64, 62], 
+                    bias=True, 
+                    bias_init_norm=False,
+                    own_norm=[sqrt(3)]+3*[sqrt(2)], # Erstes Layer bekommt Norm sqrt(3), da vorher kein ReLU
+                    outnorm_init=1, # braucht man vermutlich nicht
+                    bubble=True
+                ):
+        super().__init__()
+        self.bubble = bubble
+        self.depth = len(dims)
+        self.own_norm = own_norm
+        if bubble:
+            self.layers = nn.ModuleList([
+                            scalable_linear(
+                                dims[i], dims[i+1], bias=bias, 
+                                bias_init_norm=bias_init_norm, 
+                                start_norm=own_norm[i], # alt, müsste mal beseitigt werden
+                                own_norm=own_norm[i]
+                            ) for i in range(len(dims)-1)
+                            ])
+        else:
+            self.layers = nn.ModuleList([
+                            scalable_linear_noBubble(
+                                dims[i], dims[i+1], bias=bias, 
+                                start_norm=own_norm[i]
+                            ) for i in range(len(dims)-1)])
+
+        self.outnorms = nn.Parameter(outnorm_init*torch.ones(dims[-1]), requires_grad=False)
+        with torch.no_grad():
+            self.normalize(own_norm, bubble=True)
+
+    def forward(self, x):
+        for idx, layer in enumerate(self.layers):
+            x = layer(x)
+            if idx<(self.depth-2):
+                x = F.relu(x)# * 1/normlist
+        return self.outnorms*x
+
+    def normalize(self, target_norm=None, bubble=True):
+        if target_norm is None:
+            target_norm = self.own_norm
+        old_norms = None
+        #returnnorms = torch.zeros((4, 2))
+        for i, layer in enumerate(self.layers):
+            with torch.no_grad():
+                old_norms = layer.normalize(target_norm=target_norm[i], old_norms=old_norms)
+                if not bubble:
+                    old_norms = None
+        if bubble:
+            self.outnorms.data.mul_(old_norms.squeeze())
+
+        return None #"""returnnorms"""
+
+class MLP_normed_alt(nn.Module):
     def __init__(self, dims=[784, 256, 64, 64, 62], bias=True, bias_init_norm=True, centrify=False, start_norm=sqrt(3), own_norm=1/sqrt(3), outnorm_init=1, bubble=True):
         super().__init__()
         self.bubble = bubble
@@ -181,8 +234,6 @@ class Normalizer():
         torch.save(self.img_std, "normalizer_data/img_std.pt")
 
 
-
-
 class Trainer(nn.Module):
     def __init__(self, network, normalizer):
         super().__init__()
@@ -208,17 +259,12 @@ def NetworkGenerator(n):
     ##yield MLP_normed(bias=True, centrify=False, bubble=True, start_norm=sqrt(3), outnorm_init=1)
     #yield MLP(bn=True)
     for _ in range(n):
-        yield MLP_normed(bias=True, bias_init_norm=False, centrify=False, bubble=True, start_norm=1/sqrt(3), own_norm=1/sqrt(3), outnorm_init=1)
+        yield MLP_normed(bias_init_norm=False, own_norm=[sqrt(3)]+3*[sqrt(2)])
     for _ in range(n):
-        yield MLP_normed(bias=True, bias_init_norm=False, centrify=False, bubble=True, start_norm=sqrt(3), own_norm=sqrt(3), outnorm_init=1)
+        yield MLP_normed(bias_init_norm=True, own_norm=[1/sqrt(3)]+3*[1/sqrt(2)])
     for _ in range(n):
-        yield MLP_normed(bias=True, bias_init_norm=False, centrify=False, bubble=True, start_norm=3, own_norm=3, outnorm_init=1)
+        yield MLP(bn=False)
     """for _ in range(n):
         yield MLP_normed(bias=True, bias_init_norm=False, centrify=False, bubble=True, start_norm=sqrt(3), own_norm=1/sqrt(3), outnorm_init=1)
     for _ in range(n):
         yield MLP(bn=True)"""
-    
-    #for _ in range(n):
-    #    yield MLP()
-    #for _ in range(n):
-    #    yield MLP(bn=True)
